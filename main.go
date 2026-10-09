@@ -6,28 +6,17 @@ import (
 	"io"
 	"os"
 	"slices"
-	"strings"
 )
 
-func getPrefix(path string, isLast bool) string {
-	depth := strings.Count(path, string(os.PathSeparator))
-	var prefix, suffix string
+func getSticks(isLast bool) string {
 	if isLast {
-		suffix = "└───"
+		return "└───"
 	} else {
-		suffix = "├───"
+		return "├───"
 	}
-	if isLast && depth != 0 {
-		prefix = "│"
-	}
-	for range depth {
-		prefix += "\t│"
-	}
-	prefix += suffix
-	return prefix
 }
 
-func getSortedEntries(path string) ([]os.DirEntry, error) {
+func getSortedEntries(path string, printFiles bool) ([]os.DirEntry, error) {
 	d, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't open dir %w", err)
@@ -42,21 +31,33 @@ func getSortedEntries(path string) ([]os.DirEntry, error) {
 		return cmp.Compare(a.Name(), b.Name())
 	})
 
-	return entries, nil
+	return slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
+		return !printFiles && !entry.IsDir()
+	}), nil
 }
 
-func dirTree(out io.Writer, path string, printFiles bool) error {
-	entries, err := getSortedEntries(path)
+func recursive(out io.Writer, path string, printFiles bool, prefix string) error {
+	entries, err := getSortedEntries(path, printFiles)
 	if err != nil {
 		return fmt.Errorf("getSortedEntries: %w", err)
 	}
 
 	for i, entry := range entries {
-		prefix := getPrefix(path, i == len(entries)-1)
+		sticks := getSticks(i == len(entries)-1)
 		entryName := entry.Name()
 		if entry.IsDir() {
-			fmt.Fprintf(out, "%s%s\n", prefix, entryName)
-			dirTree(out, path+string(os.PathSeparator)+entryName, printFiles)
+			var dirOffset string
+			fmt.Fprintf(out, "%s%s\n", prefix+sticks, entryName)
+
+			if i == len(entries)-1 {
+				dirOffset = "\t"
+			} else {
+				dirOffset = "│\t"
+			}
+
+			if err := recursive(out, path+string(os.PathSeparator)+entryName, printFiles, prefix+dirOffset); err != nil {
+				return err
+			}
 		} else if printFiles {
 			entryInfo, err := entry.Info()
 			if err != nil {
@@ -65,13 +66,17 @@ func dirTree(out io.Writer, path string, printFiles bool) error {
 
 			fileSize := entryInfo.Size()
 			if fileSize == 0 {
-				fmt.Fprintf(out, "%s%s (%s)\n", prefix, entryName, "empty")
+				fmt.Fprintf(out, "%s%s (%s)\n", prefix+sticks, entryName, "empty")
 			} else {
-				fmt.Fprintf(out, "%s%s (%db)\n", prefix, entryName, fileSize)
+				fmt.Fprintf(out, "%s%s (%db)\n", prefix+sticks, entryName, fileSize)
 			}
 		}
 	}
 	return nil
+}
+
+func dirTree(out io.Writer, path string, printFiles bool) error {
+	return recursive(out, path, printFiles, "")
 }
 
 func main() {
