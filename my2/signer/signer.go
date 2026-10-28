@@ -5,12 +5,30 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-func ExecutePipeline(workers ...job) {
-	in := make(chan interface{}, 100)
-	out := make(chan interface{}, 100)
+const maxInput = 2
 
+// func StartPipes(in, out chan interface{}, workers ...job) {
+// 	for i, f := range workers {
+// 		if i&1 == 0 {
+// 			f(in, out)
+// 		} else {
+// 			f(out, in)
+// 		}
+// 	}
+
+// }
+
+func ExecutePipeline(workers ...job) {
+	in := make(chan interface{}, maxInput)
+	out := make(chan interface{}, maxInput)
+
+	// workers[0](in, out)
+	// for input := range in {
+	// 	StartPipes(in,)
+	// }
 	for i, f := range workers {
 		if i&1 == 0 {
 			f(in, out)
@@ -21,7 +39,9 @@ func ExecutePipeline(workers ...job) {
 }
 
 func SingleHash(in, out chan interface{}) {
+	// for range maxInput {
 	for input := range in {
+		// input := <-in
 		fmt.Println(input)
 		md5Data := DataSignerMd5(strconv.Itoa(input.(int)))
 		crc32md5Data := DataSignerCrc32(md5Data)
@@ -47,12 +67,16 @@ func MultiHash(in, out chan interface{}) {
 
 func CombineResults(in, out chan interface{}) {
 	var result []string
+	wg := &sync.WaitGroup{}
 
 	for input := range in {
+		wg.Add(1)
 		fmt.Println(input)
-		result = append(result, input.(string))
+		result = append(result, strconv.Itoa(input.(int)))
+		wg.Done()
 	}
 
+	wg.Wait()
 	slices.Sort(result)
 	out <- strings.Join(result, "_")
 }
