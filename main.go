@@ -18,8 +18,8 @@ func startWorker(workerNum int, in <-chan string) {
 }
 
 func main() {
-	runtime.GOMAXPROCS(0)               // попробуйте с 0 (все доступные) и 1
-	workerInput := make(chan string, 2) // попробуйте увеличить размер канала
+	runtime.GOMAXPROCS(0)                 // попробуйте с 0 (все доступные) и 1
+	workerInput := make(chan string, 100) // попробуйте увеличить размер канала
 	for i := 0; i < goroutinesNum; i++ {
 		go startWorker(i, workerInput)
 	}

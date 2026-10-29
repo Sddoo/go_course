@@ -2,43 +2,76 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-const maxInput = 2
+const maxInput = 100
 
-// func StartPipes(in, out chan interface{}, workers ...job) {
-// 	for i, f := range workers {
-// 		if i&1 == 0 {
-// 			f(in, out)
-// 		} else {
-// 			f(out, in)
-// 		}
+var quotaCh = make(chan struct{}, 2)
+
+// func ExecutePipeline(workers ...job) {
+// 	in := make(chan interface{}, 1)
+// 	out := make(chan interface{}, 1)
+
+// 	for _, f := range workers {
+// 		// if i&1 == 0 {
+// 		// 	go f(in, out)
+// 		// } else {
+// 		// 	go f(out, in)
+// 		// }
+// 		go f(in, out)
+// 		in, out = out, in
 // 	}
-
 // }
 
-func ExecutePipeline(workers ...job) {
-	in := make(chan interface{}, maxInput)
-	out := make(chan interface{}, maxInput)
-
-	// workers[0](in, out)
-	// for input := range in {
-	// 	StartPipes(in,)
-	// }
-	for i, f := range workers {
-		if i&1 == 0 {
-			f(in, out)
-		} else {
-			f(out, in)
-		}
+// попытка обеспечить последовательную передачу каналов между воркерами
+func PipeSwap(src, dst chan interface{}) {
+	mu := &sync.Mutex{}
+	mu.Lock()
+	for srcVal := range src {
+		dst <- srcVal
 	}
+	mu.Unlock()
+}
+
+func StartPipe(worker job, bindingCh chan interface{}, wg *sync.WaitGroup) {
+	fmt.Println("Pipe has started") //
+	quotaCh <- struct{}{}
+	localIn := make(chan interface{}, maxInput)
+	localOut := make(chan interface{}, maxInput)
+
+	PipeSwap(bindingCh, localIn)
+	close(localIn)
+	fmt.Println("PipeSwap occured") //
+
+	worker(localIn, localOut)
+
+	PipeSwap(localOut, bindingCh)
+	close(localOut)
+
+	wg.Done()
+	<-quotaCh
+}
+
+func ExecutePipeline(workers ...job) {
+	bindingCh := make(chan interface{}, maxInput)
+	wg := &sync.WaitGroup{}
+
+	for i, f := range workers {
+		wg.Add(1)
+		fmt.Println(i) //
+		go StartPipe(f, bindingCh, wg)
+	}
+	wg.Wait()
+	fmt.Println("Done") //
 }
 
 func SingleHash(in, out chan interface{}) {
+	fmt.Println("SingleHash started") //
 	// for range maxInput {
 	for input := range in {
 		// input := <-in
@@ -49,10 +82,12 @@ func SingleHash(in, out chan interface{}) {
 		result := crc32Data + "~" + crc32md5Data
 
 		out <- result
+		runtime.Gosched()
 	}
 }
 
 func MultiHash(in, out chan interface{}) {
+	fmt.Println("MultiHash started") //
 	for input := range in {
 		hashes := make([]string, 6)
 		for th := range hashes {
@@ -62,21 +97,19 @@ func MultiHash(in, out chan interface{}) {
 		result := strings.Join(hashes, "")
 
 		out <- result
+		runtime.Gosched()
 	}
 }
 
 func CombineResults(in, out chan interface{}) {
+	fmt.Println("CombineResults started") //
 	var result []string
-	wg := &sync.WaitGroup{}
 
 	for input := range in {
-		wg.Add(1)
 		fmt.Println(input)
 		result = append(result, strconv.Itoa(input.(int)))
-		wg.Done()
 	}
 
-	wg.Wait()
 	slices.Sort(result)
 	out <- strings.Join(result, "_")
 }
