@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,8 +10,7 @@ import (
 
 const maxInput = 100
 
-var quotaCh = make(chan struct{}, 2)
-
+// 1
 // func ExecutePipeline(workers ...job) {
 // 	in := make(chan interface{}, 1)
 // 	out := make(chan interface{}, 1)
@@ -28,66 +26,77 @@ var quotaCh = make(chan struct{}, 2)
 // 	}
 // }
 
+// 2
 // попытка обеспечить последовательную передачу каналов между воркерами
-func PipeSwap(src, dst chan interface{}) {
-	mu := &sync.Mutex{}
-	mu.Lock()
-	for srcVal := range src {
-		dst <- srcVal
-	}
-	mu.Unlock()
-}
+// func PipeSwap(src, dst chan interface{}) {
+// 	mu := &sync.Mutex{}
+// 	mu.Lock()
+// 	for srcVal := range src {
+// 		dst <- srcVal
+// 	}
+// 	mu.Unlock()
+// }
 
-func StartPipe(worker job, bindingCh chan interface{}, wg *sync.WaitGroup) {
-	fmt.Println("Pipe has started") //
-	quotaCh <- struct{}{}
-	localIn := make(chan interface{}, maxInput)
-	localOut := make(chan interface{}, maxInput)
+// func StartPipe(worker job, bindingCh chan interface{}, wg *sync.WaitGroup) {
+// 	fmt.Println("Pipe has started") //
+// 	quotaCh <- struct{}{}
+// 	localIn := make(chan interface{}, maxInput)
+// 	localOut := make(chan interface{}, maxInput)
 
-	PipeSwap(bindingCh, localIn)
-	close(localIn)
-	fmt.Println("PipeSwap occured") //
+// 	PipeSwap(bindingCh, localIn)
+// 	close(localIn)
+// 	fmt.Println("PipeSwap occured") //
 
-	worker(localIn, localOut)
+// 	worker(localIn, localOut)
 
-	PipeSwap(localOut, bindingCh)
-	close(localOut)
+// 	PipeSwap(localOut, bindingCh)
+// 	close(localOut)
 
-	wg.Done()
-	<-quotaCh
+// 	wg.Done()
+// 	<-quotaCh
+// }
+
+// 3
+func PipeWrapper(in chan interface{}, worker job, wg *sync.WaitGroup) chan interface{} {
+	out := make(chan interface{}, maxInput)
+
+	go func() {
+		worker(in, out)
+		close(out)
+		wg.Done()
+	}()
+
+	return out
 }
 
 func ExecutePipeline(workers ...job) {
-	bindingCh := make(chan interface{}, maxInput)
+	out := make(chan interface{}, maxInput)
 	wg := &sync.WaitGroup{}
 
-	for i, f := range workers {
+	for _, f := range workers {
 		wg.Add(1)
-		fmt.Println(i) //
-		go StartPipe(f, bindingCh, wg)
+		out = PipeWrapper(out, f, wg)
 	}
 	wg.Wait()
-	fmt.Println("Done") //
 }
 
 func SingleHash(in, out chan interface{}) {
 	fmt.Println("SingleHash started") //
-	// for range maxInput {
+
 	for input := range in {
-		// input := <-in
-		fmt.Println(input)
 		md5Data := DataSignerMd5(strconv.Itoa(input.(int)))
 		crc32md5Data := DataSignerCrc32(md5Data)
 		crc32Data := DataSignerCrc32(strconv.Itoa(input.(int)))
 		result := crc32Data + "~" + crc32md5Data
 
 		out <- result
-		runtime.Gosched()
+		// runtime.Gosched()
 	}
 }
 
 func MultiHash(in, out chan interface{}) {
 	fmt.Println("MultiHash started") //
+
 	for input := range in {
 		hashes := make([]string, 6)
 		for th := range hashes {
@@ -97,7 +106,7 @@ func MultiHash(in, out chan interface{}) {
 		result := strings.Join(hashes, "")
 
 		out <- result
-		runtime.Gosched()
+		// runtime.Gosched()
 	}
 }
 
@@ -106,8 +115,8 @@ func CombineResults(in, out chan interface{}) {
 	var result []string
 
 	for input := range in {
-		fmt.Println(input)
-		result = append(result, strconv.Itoa(input.(int)))
+		fmt.Println("CombineResults: ", input) //
+		result = append(result, input.(string))
 	}
 
 	slices.Sort(result)
