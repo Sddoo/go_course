@@ -9,54 +9,8 @@ import (
 )
 
 const maxInput = 100
+const maxMultiHashThreads = 6
 
-// 1
-// func ExecutePipeline(workers ...job) {
-// 	in := make(chan interface{}, 1)
-// 	out := make(chan interface{}, 1)
-
-// 	for _, f := range workers {
-// 		// if i&1 == 0 {
-// 		// 	go f(in, out)
-// 		// } else {
-// 		// 	go f(out, in)
-// 		// }
-// 		go f(in, out)
-// 		in, out = out, in
-// 	}
-// }
-
-// 2
-// попытка обеспечить последовательную передачу каналов между воркерами
-// func PipeSwap(src, dst chan interface{}) {
-// 	mu := &sync.Mutex{}
-// 	mu.Lock()
-// 	for srcVal := range src {
-// 		dst <- srcVal
-// 	}
-// 	mu.Unlock()
-// }
-
-// func StartPipe(worker job, bindingCh chan interface{}, wg *sync.WaitGroup) {
-// 	fmt.Println("Pipe has started") //
-// 	quotaCh <- struct{}{}
-// 	localIn := make(chan interface{}, maxInput)
-// 	localOut := make(chan interface{}, maxInput)
-
-// 	PipeSwap(bindingCh, localIn)
-// 	close(localIn)
-// 	fmt.Println("PipeSwap occured") //
-
-// 	worker(localIn, localOut)
-
-// 	PipeSwap(localOut, bindingCh)
-// 	close(localOut)
-
-// 	wg.Done()
-// 	<-quotaCh
-// }
-
-// 3
 func PipeWrapper(in chan interface{}, worker job, wg *sync.WaitGroup) chan interface{} {
 	out := make(chan interface{}, maxInput)
 
@@ -90,7 +44,6 @@ func SingleHash(in, out chan interface{}) {
 		result := crc32Data + "~" + crc32md5Data
 
 		out <- result
-		// runtime.Gosched()
 	}
 }
 
@@ -98,15 +51,32 @@ func MultiHash(in, out chan interface{}) {
 	fmt.Println("MultiHash started") //
 
 	for input := range in {
-		hashes := make([]string, 6)
-		for th := range hashes {
-			crc32Data := DataSignerCrc32(strconv.Itoa(th) + input.(string))
-			hashes[th] = crc32Data
+		// возможно стоит вынести эти 2 инициализации выше
+		hashesCh := make(chan string, maxMultiHashThreads)
+		hashes := make([]string, 0, maxMultiHashThreads)
+
+		for th := range maxMultiHashThreads {
+			go func(th int) {
+				crcData := DataSignerCrc32(strconv.Itoa(th) + input.(string))
+				// возможно хуевая идея
+				for len(hashes) != th {
+				}
+				hashesCh <- crcData
+			}(th)
 		}
+
+		// возможно стоит избавить от этого цикла путем избавления от hashesCh
+		for hash := range hashesCh {
+			hashes = append(hashes, hash)
+			if len(hashes) == maxMultiHashThreads {
+				close(hashesCh)
+			}
+		}
+
+		fmt.Println("Multihash hashes", hashes)
 		result := strings.Join(hashes, "")
 
 		out <- result
-		// runtime.Gosched()
 	}
 }
 
