@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,12 +34,23 @@ func ExecutePipeline(workers ...job) {
 }
 
 func SingleHash(in, out chan interface{}) {
-	fmt.Println("SingleHash started") //
+	var crc32md5Data, crc32Data string
+	wg := &sync.WaitGroup{}
 
 	for input := range in {
 		md5Data := DataSignerMd5(strconv.Itoa(input.(int)))
-		crc32md5Data := DataSignerCrc32(md5Data)
-		crc32Data := DataSignerCrc32(strconv.Itoa(input.(int)))
+		wg.Add(2)
+
+		go func() {
+			crc32md5Data = DataSignerCrc32(md5Data)
+			wg.Done()
+		}()
+		go func() {
+			crc32Data = DataSignerCrc32(strconv.Itoa(input.(int)))
+			wg.Done()
+		}()
+
+		wg.Wait()
 		result := crc32Data + "~" + crc32md5Data
 
 		out <- result
@@ -48,7 +58,6 @@ func SingleHash(in, out chan interface{}) {
 }
 
 func MultiHash(in, out chan interface{}) {
-	fmt.Println("MultiHash started") //
 	wg := &sync.WaitGroup{}
 	mu := sync.Mutex{}
 	hashes := make([]string, maxMultiHashThreads)
@@ -74,11 +83,9 @@ func MultiHash(in, out chan interface{}) {
 }
 
 func CombineResults(in, out chan interface{}) {
-	fmt.Println("CombineResults started") //
 	var result []string
 
 	for input := range in {
-		fmt.Println("CombineResults: ", input) //
 		result = append(result, input.(string))
 	}
 

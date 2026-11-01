@@ -2,52 +2,23 @@ package main
 
 import (
 	"fmt"
-	"runtime"
-	"strings"
-	"time"
+	"sync"
 )
 
-const goroutinesNum = 3
-
-func startWorker(workerNum int, in <-chan string) {
-	for input := range in {
-		fmt.Printf(formatWork(workerNum, input))
-		runtime.Gosched() // попробуйте закомментировать
-	}
-	printFinishWork(workerNum)
-}
-
 func main() {
-	runtime.GOMAXPROCS(0)                 // попробуйте с 0 (все доступные) и 1
-	workerInput := make(chan string, 100) // попробуйте увеличить размер канала
-	for i := 0; i < goroutinesNum; i++ {
-		go startWorker(i, workerInput)
+	var counters = map[int]int{}
+	mu := &sync.Mutex{}
+	for i := 0; i < 5; i++ {
+		go func(counters map[int]int, th int) {
+			for j := 0; j < 5; j++ {
+				mu.Lock()
+				counters[th*10+j]++
+				mu.Unlock()
+			}
+		}(counters, i)
 	}
-
-	months := []string{"Январь", "Февраль", "Март",
-		"Апрель", "Май", "Июнь",
-		"Июль", "Август", "Сентябрь",
-		"Октябрь", "Ноябрь", "Декабрь",
-	}
-
-	for _, monthName := range months {
-		workerInput <- monthName
-	}
-	// close(workerInput) // попробуйте закомментировать
-
-	time.Sleep(time.Millisecond)
-}
-
-func formatWork(in int, input string) string {
-	return fmt.Sprintln(strings.Repeat("  ", in), "█",
-		strings.Repeat("  ", goroutinesNum-in),
-		"th", in,
-		"recieved", input)
-}
-
-func printFinishWork(in int) {
-	fmt.Println(strings.Repeat("  ", in), "█",
-		strings.Repeat("  ", goroutinesNum-in),
-		"===", in,
-		"finished")
+	fmt.Scanln()
+	// mu.Lock()
+	fmt.Println("counters result", counters)
+	// mu.Unlock()
 }
