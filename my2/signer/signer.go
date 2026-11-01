@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,31 +33,36 @@ func ExecutePipeline(workers ...job) {
 	wg.Wait()
 }
 
-// надо распараллелить это
 func SingleHash(in, out chan interface{}) {
-	var crc32md5Data, crc32Data string
-	wg := &sync.WaitGroup{}
+	outWg := &sync.WaitGroup{}
 
 	for input := range in {
-		fmt.Println("SingleHash goes in", input)
+		outWg.Add(1)
 		md5Data := DataSignerMd5(strconv.Itoa(input.(int)))
-		wg.Add(2)
 
-		go func() {
-			crc32md5Data = DataSignerCrc32(md5Data)
-			wg.Done()
-		}()
-		go func() {
-			crc32Data = DataSignerCrc32(strconv.Itoa(input.(int)))
-			wg.Done()
-		}()
+		go func(md5Data string, outWg *sync.WaitGroup) {
+			wg := &sync.WaitGroup{}
+			var crc32md5Data, crc32Data string
+			wg.Add(2)
 
-		wg.Wait()
-		result := crc32Data + "~" + crc32md5Data
+			go func() {
+				crc32md5Data = DataSignerCrc32(md5Data)
+				wg.Done()
+			}()
+			go func() {
+				crc32Data = DataSignerCrc32(strconv.Itoa(input.(int)))
+				wg.Done()
+			}()
 
-		fmt.Println("SingleHash goes out", result)
-		out <- result
+			wg.Wait()
+			result := crc32Data + "~" + crc32md5Data
+
+			out <- result
+			outWg.Done()
+		}(md5Data, outWg)
 	}
+
+	outWg.Wait()
 }
 
 func ComputeMultiHash(input interface{}, out chan interface{}, outWg *sync.WaitGroup) {
@@ -80,7 +84,6 @@ func ComputeMultiHash(input interface{}, out chan interface{}, outWg *sync.WaitG
 	wg.Wait()
 	result := strings.Join(hashes, "")
 
-	// fmt.Println("ComputeMultiHash goes out", result)
 	out <- result
 	outWg.Done()
 }
