@@ -51,27 +51,23 @@ func MultiHash(in, out chan interface{}) {
 	fmt.Println("MultiHash started") //
 	wg := &sync.WaitGroup{}
 	mu := sync.Mutex{}
-	hashes := make([]string, 0, maxMultiHashThreads)
+	hashes := make([]string, maxMultiHashThreads)
 
 	for input := range in {
 		for th := range maxMultiHashThreads {
 			wg.Add(1)
 			go func(th int) {
 				crcData := DataSignerCrc32(strconv.Itoa(th) + input.(string))
-				// возможно хуевая идея
-				for len(hashes) != th {
-				}
 				mu.Lock()
-				hashes = append(hashes, crcData)
+				hashes[th] = crcData
 				mu.Unlock()
 				wg.Done()
 			}(th)
 		}
 
 		wg.Wait()
-		fmt.Println("Multihash hashes", hashes)
 		result := strings.Join(hashes, "")
-		hashes = hashes[:0]
+		clear(hashes)
 
 		out <- result
 	}
