@@ -27,9 +27,9 @@ goos: windows
 
 goarch: amd64
 
-BenchmarkSlow-8 10 142703250 ns/op 336887900 B/op 284175 allocs/op
+BenchmarkSlow-8     10    142703250 ns/op     336887900 B/op        284175 allocs/op
 
-BenchmarkSolution-8 500 2782432 ns/op 559910 B/op 10422 allocs/op
+BenchmarkSolution-8 500     2782432 ns/op        559910 B/op         10422 allocs/op
 
 PASS
 
