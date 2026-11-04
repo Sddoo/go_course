@@ -1,0 +1,86 @@
+Total: 345.45MB
+ROUTINE ======================== hw3.FastSearch in /home/vlad/workdir/go_course/my3/99_hw/fast.go
+   96.40MB   219.99MB (flat, cum) 63.68% of Total
+         .          .     17:func FastSearch(out io.Writer) {
+         .     8.12kB     18:	file, err := os.Open(inputFile)
+         .          .     19:	if err != nil {
+         .          .     20:		panic(err)
+         .          .     21:	}
+         .          .     22:
+         .    85.74MB     23:	r := regexp.MustCompile("@")
+         .          .     24:	seenBrowsers := []string{}
+         .          .     25:	uniqueBrowsers := 0
+         .          .     26:	foundUsers := ""
+         .          .     27:
+         .    49.37kB     28:	reader := bufio.NewReader(file)
+         .          .     29:	users := make([]easy.User, 0)
+         .          .     30:	for {
+         .          .     31:		line, _, err := reader.ReadLine()
+         .          .     32:		if err == io.EOF {
+   35.55MB    36.56MB     33:			break
+         .          .     34:		}
+         .          .     35:		if err != nil {
+         .          .     36:			panic(err)
+    3.97MB     3.97MB     37:		}
+         .          .     38:
+   36.80MB    69.67MB     39:		var user easy.User
+         .          .     40:		// fmt.Printf("%v %v\n", err, line)
+         .          .     41:		err = json.Unmarshal([]byte(line), &user)
+         .          .     42:		if err != nil {
+    7.64MB     7.64MB     43:			panic(err)
+         .          .     44:		}
+         .          .     45:		users = append(users, user)
+         .          .     46:	}
+         .          .     47:
+         .          .     48:	for i, user := range users {
+         .          .     49:		isAndroid := false
+         .          .     50:		isMSIE := false
+         .          .     51:
+         .          .     52:		browsers := user.Browsers
+         .          .     53:
+         .          .     54:		for _, browserRaw := range browsers {
+         .          .     55:			if strings.Contains(browserRaw, "Android") {
+         .          .     56:				isAndroid = true
+         .          .     57:				notSeenBefore := true
+         .          .     58:				for _, item := range seenBrowsers {
+         .          .     59:					if item == browserRaw {
+         .          .     60:						notSeenBefore = false
+         .          .     61:					}
+         .          .     62:				}
+  178.75kB   178.75kB     63:				if notSeenBefore {
+         .          .     64:					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
+         .          .     65:					seenBrowsers = append(seenBrowsers, browserRaw)
+         .          .     66:					uniqueBrowsers++
+         .          .     67:				}
+         .          .     68:			}
+         .          .     69:		}
+         .          .     70:
+         .          .     71:		for _, browserRaw := range browsers {
+         .          .     72:			if strings.Contains(browserRaw, "MSIE") {
+         .          .     73:				isMSIE = true
+         .          .     74:				notSeenBefore := true
+         .          .     75:				for _, item := range seenBrowsers {
+         .          .     76:					if item == browserRaw {
+         .          .     77:						notSeenBefore = false
+         .          .     78:					}
+         .          .     79:				}
+  101.56kB   101.56kB     80:				if notSeenBefore {
+         .          .     81:					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
+         .          .     82:					seenBrowsers = append(seenBrowsers, browserRaw)
+         .          .     83:					uniqueBrowsers++
+         .          .     84:				}
+         .          .     85:			}
+         .          .     86:		}
+         .          .     87:
+         .          .     88:		if !(isAndroid && isMSIE) {
+         .          .     89:			continue
+         .          .     90:		}
+         .     3.11MB     91:
+   11.86MB    12.39MB     92:		// log.Println("Android and MSIE user:", user["name"], user["email"])
+         .          .     93:		email := r.ReplaceAllString(user.Email, " [at] ")
+         .          .     94:		foundUsers += fmt.Sprintf("[%d] %s <%s>\n", i, user.Name, email)
+  309.77kB   585.27kB     95:	}
+         .          .     96:
+         .          .     97:	fmt.Fprintln(out, "found users:\n"+foundUsers)
+         .          .     98:	fmt.Fprintln(out, "Total unique browsers", len(seenBrowsers))
+         .          .     99:}
